@@ -1,0 +1,19 @@
+# Rust build output
+/src-tauri/target/
+/src-tauri/gen/
+
+# Local server data and secrets
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.jsonl
+
+# Local tools and OS files
+node_modules/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Exam</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 0; display: grid; place-items: center; min-height: 100vh; background: #f6f6f4; color: #1d1d1b; }
+  main { width: min(560px, 90vw); }
+  #status { padding: 12px 14px; border-radius: 8px; background: #fff; border: 1px solid #d8d8d4; }
+  #status.bad { border-color: #c0392b; color: #c0392b; }
+  #status.good { border-color: #2e7d32; color: #2e7d32; }
+  button { margin-top: 12px; padding: 10px 16px; font: inherit; border: 0; border-radius: 8px; background: #1d1d1b; color: #fff; cursor: pointer; }
+  ul { padding-left: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h2>System check</h2>
+  <div id="status">Not started.</div>
+  <button id="go">Run check &amp; unlock exam</button>
+</main>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+  const el = document.getElementById('status');
+
+  function render(signed) {
+    const p = JSON.parse(signed.payload);
+    el.className = p.ok ? 'good' : 'bad';
+    el.innerHTML = p.ok
+      ? 'Environment OK. Exam unlocked.'
+      : '<b>Exam locked.</b><ul>' + p.violations.map(v => `<li>${v.code}: ${v.detail}</li>`).join('') + '</ul>';
+  }
+
+  // TODO: replace with your backend's session handshake.
+  async function fetchSession() {
+    return { key: 'demo-session-key', nonce: crypto.randomUUID() };
+  }
+
+  document.getElementById('go').onclick = async () => {
+    const { key, nonce } = await fetchSession();
+    const first = await invoke('start_session', { key, nonce, serverUrl: 'https://your-server.example/api/guard/report' });
+    render(first);
+    // TODO: POST `first` to the server; server decides whether to unlock.
+  };
+
+  listen('guard:report', (e) => {
+    render(e.payload);
+    // TODO: forward every heartbeat to the server (fetch/WebSocket).
+  });
+</script>
+</body>
+</html>

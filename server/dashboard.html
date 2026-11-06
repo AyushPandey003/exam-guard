@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ExamGuard review</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 24px; background: #f6f6f4; color: #1d1d1b; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e3e3df; vertical-align: top; }
+  .locked { color: #c0392b; font-weight: 600; } .ok { color: #2e7d32; }
+  button { margin-right: 6px; padding: 4px 10px; border: 1px solid #1d1d1b; border-radius: 6px; background: #fff; cursor: pointer; }
+  input { padding: 6px 8px; margin-right: 6px; }
+  code { font-size: 12px; } #login { max-width: 320px; } #err { color: #c0392b; }
+  .bar { display: flex; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+<div id="login">
+  <h2>Reviewer sign in</h2>
+  <p><input id="u" placeholder="Username" autocomplete="username"></p>
+  <p><input id="p" type="password" placeholder="Password" autocomplete="current-password"></p>
+  <button onclick="login()">Sign in</button> <span id="err"></span>
+</div>
+<div id="app" hidden>
+  <div class="bar"><h2>Flagged sessions</h2><span><button onclick="load()">Refresh</button><button onclick="logout()">Sign out</button></span></div>
+  <table>
+    <thead><tr><th>Session</th><th>State</th><th>Reasons / recent events</th><th>Review</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+<script>
+  let token = '';
+  try { token = sessionStorage.getItem('eg_token') || ''; } catch {}
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const auth = () => ({ Authorization: 'Bearer ' + token });
+  const show = (on) => { document.getElementById('login').hidden = on; document.getElementById('app').hidden = !on; };
+
+  async function login() {
+    const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: u.value, password: p.value }) });
+    const j = await r.json();
+    if (!r.ok) { document.getElementById('err').textContent = j.error; return; }
+    token = j.token; try { sessionStorage.setItem('eg_token', token); } catch {}
+    p.value = ''; show(true); load();
+  }
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST', headers: auth() });
+    token = ''; try { sessionStorage.removeItem('eg_token'); } catch {} show(false);
+  }
+  async function load() {
+    const r = await fetch('/api/guard/sessions', { headers: auth() });
+    if (r.status === 401) { show(false); return; }
+    show(true);
+    document.getElementById('rows').innerHTML = (await r.json()).map(s => `
+      <tr>
+        <td><code>${esc(s.nonce.slice(0, 8))}</code></td>
+        <td class="${s.locked ? 'locked' : 'ok'}">${s.locked ? 'LOCKED' : 'ok'}</td>
+        <td>${esc(s.reasons.join('; ') || '-')}<br>${s.events.map(e =>
+          `<small>${new Date(e.ts * 1000).toLocaleTimeString()}: ${esc(e.violations.map(v => v.code + ' ' + v.detail).join(', '))}</small>`
+        ).join('<br>')}</td>
+        <td>${s.review ? esc(s.review.decision) + ' by ' + esc(s.review.by) + ' — ' + esc(s.review.note) :
+          `<button onclick="decide('${esc(s.nonce)}','cleared')">Clear (false positive)</button>
+           <button onclick="decide('${esc(s.nonce)}','confirmed')">Confirm</button>`}</td>
+      </tr>`).join('');
+  }
+  async function decide(nonce, decision) {
+    const note = prompt('Note for the record (required):');
+    if (!note || !note.trim()) return;
+    await fetch('/api/guard/review/' + nonce, { method: 'POST',
+      headers: { ...auth(), 'content-type': 'application/json' }, body: JSON.stringify({ decision, note }) });
+    load();
+  }
+  if (token) load();
+</script>
+</body>
+</html>

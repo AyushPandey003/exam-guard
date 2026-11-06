@@ -1,0 +1,6 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "windows": ["exam"],
+  "permissions": ["core:default", "core:event:default"]
+}
