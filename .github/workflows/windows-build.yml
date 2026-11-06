@@ -34,18 +34,27 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Install Tauri 2 CLI
-        run: cargo install tauri-cli --version '^2' --locked
+      - name: Cache Rust dependencies and build output
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
+
+      - name: Install prebuilt Tauri 2 CLI
+        run: |
+          npm install --global @tauri-apps/cli@2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          tauri --version
 
       - name: Generate placeholder icons
         run: |
           $logo = Join-Path $env:RUNNER_TEMP 'examguard-logo.svg'
           '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#16324f"/><path d="M256 64 416 128v120c0 96-64 160-160 200-96-40-160-104-160-200V128Z" fill="#fff"/><path d="m176 256 56 56 112-128" fill="none" stroke="#16856b" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/></svg>' | Set-Content -Path $logo -Encoding utf8
-          cargo tauri icon $logo
+          tauri icon $logo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build Windows installers (do not launch app)
-        run: cargo tauri build
+        run: tauri build
 
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
