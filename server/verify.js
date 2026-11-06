@@ -146,5 +146,6 @@ const server = http.createServer((req, res) => {
   });
 });
 
-if (require.main === module) server.listen(PORT, () => console.log(`verifier on :${PORT} (db: ${DB_PATH})`));
+// Local test setup: do not expose unauthenticated session issuance to the LAN.
+if (require.main === module) server.listen(PORT, '127.0.0.1', () => console.log(`verifier on http://127.0.0.1:${PORT} (db: ${DB_PATH})`));
 module.exports = { server, store };

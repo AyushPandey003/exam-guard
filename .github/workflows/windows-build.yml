@@ -18,6 +18,15 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Set up Node for server tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test local verifier
+        working-directory: .
+        run: node server/test.js
+
       - name: Install latest stable Rust
         run: |
           rustup toolchain install stable --profile minimal

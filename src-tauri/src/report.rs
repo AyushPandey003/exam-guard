@@ -28,7 +28,7 @@ struct Payload<'a> {
 /// `payload` is the exact JSON string that was signed; the server must verify
 /// HMAC-SHA256(session_key, payload) == sig, then check nonce, monotonic seq
 /// and timestamp freshness. Missing heartbeats = agent killed = lock exam.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Signed {
     pub ok: bool,
     pub payload: String,

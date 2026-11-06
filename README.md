@@ -14,9 +14,32 @@ Enforcer layer for the proctoring stack. Runs on the candidate's machine, checks
 
 ## Server contract
 
-1. On exam start your server issues `{key, nonce}` over TLS.
-2. Page calls `start_session(key, nonce)`; agent returns a signed report (seq 0). Unlock the exam only if the server verifies `HMAC-SHA256(key, payload) == sig` and `ok == true`.
-3. Heartbeats arrive as `guard:report` events. The server must check signature, nonce, increasing `seq`, fresh `ts`. **A missing heartbeat means the agent was killed: lock the exam.**
+The bundled app is configured for **local testing**, not production:
+
+1. Rust calls `POST http://127.0.0.1:3000/api/guard/session` for a random `{key, nonce}`. The key stays in Rust; it is not sent to the UI.
+2. The page calls `start_session()` with no credentials or destination URL. Rust sends the signed initial report directly to `/api/guard/report` and returns the server's lock decision for display.
+3. Rust sends signed heartbeats every two seconds, even while locked. `guard:report` events carry the report and server decision for UI display only. Failed delivery keeps the UI locked; reports are not forwarded by the webview. The server checks signature, nonce, sequence and timestamp. Missing heartbeats lock the session.
+
+### Local end-to-end test
+
+Requires Node 22+ and a Windows build of the app. From this project folder:
+
+```powershell
+node server/create-user.js reviewer "choose-a-unique-passphrase"
+node server/verify.js
+```
+
+Keep the server terminal open. Open `http://127.0.0.1:3000/dashboard` in your browser and sign in with the staff credentials you created. Launch ExamGuard separately and click **Run check & unlock exam**. Its session ID appears in the app; match it to the dashboard. Detection reports and heartbeats should appear automatically.
+
+- Trigger a detection (for example, open OBS): the app and dashboard should show a lock.
+- Close the detected tool, then clear the lock in the dashboard with a note. A remaining violation will re-lock the session on the next heartbeat.
+- Close the agent: the server should lock an unlocked session within about 8–10 seconds.
+- Stop the server while the agent runs: the UI should lock after the next failed report (up to about 7 seconds).
+- Restart the app for a new session. One session is allowed per app process.
+
+The server binds only to `127.0.0.1`; leave `PORT` at `3000` for this app configuration. Windows Smart App Control may block an unsigned CI build; CI compilation does not establish that Windows will allow it to run.
+
+**Before production:** replace the loopback constant in `src-tauri/src/main.rs` with a controlled HTTPS service and add authenticated, authorized session issuance tied to a candidate/exam. Local unauthenticated HTTP is only a development setup, not a trustworthy exam gate.
 
 ## Review dashboard and staff accounts
 
@@ -50,7 +73,7 @@ cargo tauri dev        # or: cargo tauri build
 ## Known limits (read before relying on it)
 
 - **Bypassable by a determined user.** A user-mode agent can be run under a debugger, have its checks patched, or be given a spoofed environment (hardened VMs hide CPUID/SMBIOS; a second physical machine or capture card defeats screen protection; hardware HID emulators defeat injected-input checks). Treat it as raising cost, and combine with webcam/AI review and server-side behavioral signals.
-- **The webview relays reports.** Currently the page forwards the signed reports, so a tampered page can drop them. Better: have the agent POST directly to your server (add `reqwest`) so the page never touches the report path.
+- **The UI is not an exam authorization boundary.** Rust posts reports directly to the server; the webview only displays results. A real exam service must enforce locks server-side, not rely on the displayed “unlocked” message.
 - **False positives:** Windows with VBS/Memory Integrity reports a hypervisor even on bare metal (handled: only flagged if SMBIOS says "Virtual Machine"); IMEs, on-screen keyboards and assistive tech inject input legitimately (hence the threshold of 3). Provide a human-review path rather than silently failing candidates, and disclose to candidates exactly what is monitored (consent/privacy law).
 - Cmdline scanning only sees scripts launched with the library name visible in args.
 - **Test status:** `server/test.js` passes (signature, replay, stale timestamp, outdated agent, heartbeat loss, reviewer override). The detection modules compile and run on Linux (they correctly flag a KVM guest). The Windows-only code (registry, WTS, input hooks) and the full Tauri build have **not** been compiled; run `cargo tauri build` on Windows first and expect small fixes against `windows = "0.58"`.

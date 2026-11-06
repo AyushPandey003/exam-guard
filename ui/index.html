@@ -16,7 +16,9 @@
 <body>
 <main>
   <h2>System check</h2>
-  <div id="status">Not started.</div>
+  <p>Local test server: http://127.0.0.1:3000. Start it before running the check.</p>
+  <p id="session"></p>
+  <div id="status" role="status">Not started. Exam locked.</div>
   <button id="go">Run check &amp; unlock exam</button>
 </main>
 <script>
@@ -24,30 +26,56 @@
   const { listen } = window.__TAURI__.event;
   const el = document.getElementById('status');
 
-  function render(signed) {
-    const p = JSON.parse(signed.payload);
-    el.className = p.ok ? 'good' : 'bad';
-    el.innerHTML = p.ok
-      ? 'Environment OK. Exam unlocked.'
-      : '<b>Exam locked.</b><ul>' + p.violations.map(v => `<li>${v.code}: ${v.detail}</li>`).join('') + '</ul>';
+  const button = document.getElementById('go');
+  let lastSeq = -1;
+
+  function showError(error) {
+    el.className = 'bad';
+    el.textContent = `Exam locked. ${error}`;
   }
 
-  // TODO: replace with your backend's session handshake.
-  async function fetchSession() {
-    return { key: 'demo-session-key', nonce: crypto.randomUUID() };
+  function render(update) {
+    const p = JSON.parse(update.report.payload);
+    // Ignore an older invoke response if a heartbeat has already arrived.
+    if (p.seq <= lastSeq) return;
+    lastSeq = p.seq;
+    document.getElementById('session').textContent = `Session: ${update.nonce} · Report: ${p.seq}`;
+    if (update.error || !update.status) {
+      showError(update.error || 'No server confirmation.');
+      return;
+    }
+    const locked = update.status.locked;
+    el.className = locked ? 'bad' : 'good';
+    el.textContent = locked ? 'Exam locked by server.' : 'Server approved. Test exam unlocked.';
+    const details = [
+      ...update.status.reasons,
+      ...p.violations.map(v => `${v.code}: ${v.detail}`),
+    ];
+    if (details.length) {
+      const list = document.createElement('ul');
+      for (const detail of details) {
+        const item = document.createElement('li');
+        item.textContent = detail;
+        list.appendChild(item);
+      }
+      el.appendChild(list);
+    }
   }
 
-  document.getElementById('go').onclick = async () => {
-    const { key, nonce } = await fetchSession();
-    const first = await invoke('start_session', { key, nonce, serverUrl: 'https://your-server.example/api/guard/report' });
-    render(first);
-    // TODO: POST `first` to the server; server decides whether to unlock.
+  // Register before starting a session so the first heartbeat cannot be missed.
+  const ready = listen('guard:report', (e) => render(e.payload));
+  button.onclick = async () => {
+    button.disabled = true;
+    el.textContent = 'Contacting local server… Exam locked.';
+    try {
+      await ready;
+      render(await invoke('start_session'));
+      button.textContent = 'Monitoring active — close app to stop';
+    } catch (error) {
+      showError(error);
+      button.disabled = false;
+    }
   };
-
-  listen('guard:report', (e) => {
-    render(e.payload);
-    // TODO: forward every heartbeat to the server (fetch/WebSocket).
-  });
 </script>
 </body>
 </html>
