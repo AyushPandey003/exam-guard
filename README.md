@@ -70,6 +70,15 @@ cd exam-guard && cargo tauri icon path/to/logo.png   # generates required icons
 cargo tauri dev        # or: cargo tauri build
 ```
 
+### CI artifacts
+
+Run **Desktop builds** from GitHub Actions (`.github/workflows/windows-build.yml`). The independent jobs upload:
+
+- **ExamGuard-Windows**: MSI and NSIS installers.
+- **ExamGuard-macOS-Universal**: a `.dmg` containing an app for both Apple Silicon and Intel Macs.
+
+Artifacts expire after seven days. The jobs compile/package but do not launch the app. The macOS job uses the prebuilt Tauri CLI and installs both Rust macOS targets. No Apple Developer signing credentials or notarization are configured; macOS may block the test build. Production distribution requires signing and notarization. Windows-only input hooks and full RDP checks are not available on macOS. Run the local Node server on the Mac before starting its system check.
+
 ## Known limits (read before relying on it)
 
 - **Bypassable by a determined user.** A user-mode agent can be run under a debugger, have its checks patched, or be given a spoofed environment (hardened VMs hide CPUID/SMBIOS; a second physical machine or capture card defeats screen protection; hardware HID emulators defeat injected-input checks). Treat it as raising cost, and combine with webcam/AI review and server-side behavioral signals.
