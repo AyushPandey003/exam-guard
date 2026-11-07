@@ -119,9 +119,14 @@ async fn start_session(app: AppHandle, window: WebviewWindow) -> Result<Update, 
     result
 }
 
+#[tauri::command]
+fn input_diagnostics() -> automation::InputDiagnostics {
+    automation::diagnostics()
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![start_session])
+        .invoke_handler(tauri::generate_handler![start_session, input_diagnostics])
         .run(tauri::generate_context!())
         .expect("error while running ExamGuard");
 }

@@ -70,6 +70,16 @@ cd exam-guard && cargo tauri icon path/to/logo.png   # generates required icons
 cargo tauri dev        # or: cargo tauri build
 ```
 
+### Typing practice and input diagnostics
+
+The app includes a **Typing practice** section. Click **Start / reset typing test**, type the displayed passage, and click **Finish attempt** (or complete the passage exactly). It shows gross WPM (five characters per word), positional accuracy, character count and elapsed time. Practice works without the verifier; typed text is kept only in the webview's memory and is not uploaded or persisted. Practice reset does not reset native detection or clear server locks.
+
+The **Native input diagnostics** panel displays hook installation status, cumulative injected-key/left-click counts, sample count, mean key interval and interval standard deviation. Run the system check to start monitoring. Windows hooks observe global event timing, not just the typing box, and retain up to 200 key-down timestamps without key identities. Injected-event counts persist until the app exits. A successful hook installation is not a guarantee Windows has never silently removed the hook.
+
+A threshold crossing is a heuristic, not proof of cheating: key repeat, IMEs and assistive technology can trigger it. WPM alone never locks an exam. macOS shows native input monitoring as unsupported, while typing practice remains available. A browser-only preview of `ui/index.html` supports practice but cannot run native system checks. No screenshot capture/upload is added.
+
+Run UI logic tests with `node tests/typing.test.js`. Both desktop CI jobs run these tests and the server tests.
+
 ### CI artifacts
 
 Run **Desktop builds** from GitHub Actions (`.github/workflows/windows-build.yml`). The independent jobs upload:

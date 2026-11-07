@@ -2,31 +2,83 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Exam</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ExamGuard — System &amp; typing test</title>
 <style>
-  body { font: 15px system-ui, sans-serif; margin: 0; display: grid; place-items: center; min-height: 100vh; background: #f6f6f4; color: #1d1d1b; }
-  main { width: min(560px, 90vw); }
-  #status { padding: 12px 14px; border-radius: 8px; background: #fff; border: 1px solid #d8d8d4; }
-  #status.bad { border-color: #c0392b; color: #c0392b; }
-  #status.good { border-color: #2e7d32; color: #2e7d32; }
-  button { margin-top: 12px; padding: 10px 16px; font: inherit; border: 0; border-radius: 8px; background: #1d1d1b; color: #fff; cursor: pointer; }
+  body { font: 15px system-ui, sans-serif; margin: 0; background: #f6f6f4; color: #1d1d1b; }
+  main { width: min(960px, 92vw); margin: 32px auto; }
+  section { background: #fff; border: 1px solid #d8d8d4; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  h1, h2 { margin-top: 0; }
+  #status { padding: 12px 14px; border-radius: 8px; border: 1px solid #d8d8d4; }
+  .bad { border-color: #c0392b !important; color: #a52a20; }
+  .good { border-color: #2e7d32 !important; color: #246329; }
+  button { margin: 8px 8px 0 0; padding: 10px 16px; font: inherit; border: 0; border-radius: 8px; background: #1d1d1b; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  textarea { box-sizing: border-box; width: 100%; min-height: 130px; padding: 12px; font: 17px/1.6 system-ui; border: 1px solid #aaa; border-radius: 8px; }
+  textarea:focus { outline: 3px solid #aed8f7; }
+  #passage { background: #f0f3f5; padding: 14px; line-height: 1.8; border-radius: 8px; user-select: none; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 16px 0; }
+  .stats div { background: #f6f6f4; border-radius: 8px; padding: 12px; }
+  dt { color: #555; font-size: 13px; }
+  dd { margin: 6px 0 0; font-size: 22px; font-weight: 600; }
+  .note { color: #555; font-size: 13px; line-height: 1.6; }
+  #session { overflow-wrap: anywhere; }
   ul { padding-left: 18px; }
 </style>
 </head>
 <body>
 <main>
-  <h2>System check</h2>
-  <p>Local test server: http://127.0.0.1:3000. Start it before running the check.</p>
-  <p id="session"></p>
-  <div id="status" role="status">Not started. Exam locked.</div>
-  <button id="go">Run check &amp; unlock exam</button>
-</main>
-<script>
-  const { invoke } = window.__TAURI__.core;
-  const { listen } = window.__TAURI__.event;
-  const el = document.getElementById('status');
+  <h1>ExamGuard test console</h1>
+  <section aria-labelledby="system-heading">
+    <h2 id="system-heading">System check</h2>
+    <p>Local test server: http://127.0.0.1:3000. Start it before running the check.</p>
+    <p class="note">Starting a check enables global Windows input timing and injected-event monitoring until you close the app. It does not record key identities or screenshots.</p>
+    <p id="session"></p>
+    <div id="status" role="status">Not started. Exam locked.</div>
+    <button id="go">Run check &amp; unlock exam</button>
+  </section>
 
+  <section aria-labelledby="typing-heading">
+    <h2 id="typing-heading">Typing practice</h2>
+    <p>Type the passage below naturally. Practice works without a server; native detection requires the system check above.</p>
+    <p id="passage"></p>
+    <label for="typing-input">Your typing</label>
+    <textarea id="typing-input" disabled autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Click Start / reset, then type the passage here."></textarea>
+    <dl class="stats">
+      <div><dt>Words per minute</dt><dd id="wpm">0</dd></div>
+      <div><dt>Positional accuracy</dt><dd id="accuracy">100%</dd></div>
+      <div><dt>Characters</dt><dd id="characters">0</dd></div>
+      <div><dt>Elapsed</dt><dd id="elapsed">0s</dd></div>
+    </dl>
+    <button id="typing-reset">Start / reset typing test</button>
+    <button id="typing-stop" disabled>Finish attempt</button>
+    <p id="typing-state" role="status">Ready. Timer begins with your first input.</p>
+    <p class="note">WPM uses five characters per word. Accuracy compares your current text with the passage. These practice metrics are not cheating signals. Text stays in memory in this app and is not uploaded. Avoid entering passwords or sensitive text. Paste affects practice metrics but does not test native injected-input detection.</p>
+  </section>
+
+  <section aria-labelledby="diagnostics-heading">
+    <h2 id="diagnostics-heading">Native input diagnostics</h2>
+    <p class="note">A live view of the detector, separate from typing-practice scores. Windows counts include input from other apps too. Timing uses the most recent 200 key-down events; injected counts last for this app process. Resetting practice does not reset detection or unlock a server session.</p>
+    <p id="diagnostic-state" role="status">Waiting for native diagnostics…</p>
+    <dl class="stats">
+      <div><dt>Keyboard hook</dt><dd id="keyboard-hook">—</dd></div>
+      <div><dt>Mouse hook</dt><dd id="mouse-hook">—</dd></div>
+      <div><dt>Injected keys</dt><dd id="injected-keys">—</dd></div>
+      <div><dt>Injected left-clicks</dt><dd id="injected-clicks">—</dd></div>
+      <div><dt>Timing samples</dt><dd id="samples">—</dd></div>
+      <div><dt>Mean key interval</dt><dd id="mean">—</dd></div>
+      <div><dt>Interval variation (SD)</dt><dd id="sd">—</dd></div>
+    </dl>
+    <p class="note">Thresholds: ≥3 injected keys or left-clicks; or ≥40 key-down samples, mean interval &lt;250 ms and SD &lt;4 ms. Fast typing alone is not flagged. Key repeat, IMEs and assistive technology can cause false positives. A hook marked active means installation succeeded; it is not proof Windows has never dropped it.</p>
+  </section>
+</main>
+<script src="typing.js"></script>
+<script>
+  const el = document.getElementById('status');
   const button = document.getElementById('go');
+  const native = window.__TAURI__;
+  const invoke = native?.core?.invoke;
+  const listen = native?.event?.listen;
   let lastSeq = -1;
 
   function showError(error) {
@@ -36,7 +88,6 @@
 
   function render(update) {
     const p = JSON.parse(update.report.payload);
-    // Ignore an older invoke response if a heartbeat has already arrived.
     if (p.seq <= lastSeq) return;
     lastSeq = p.seq;
     document.getElementById('session').textContent = `Session: ${update.nonce} · Report: ${p.seq}`;
@@ -47,10 +98,7 @@
     const locked = update.status.locked;
     el.className = locked ? 'bad' : 'good';
     el.textContent = locked ? 'Exam locked by server.' : 'Server approved. Test exam unlocked.';
-    const details = [
-      ...update.status.reasons,
-      ...p.violations.map(v => `${v.code}: ${v.detail}`),
-    ];
+    const details = [...update.status.reasons, ...p.violations.map(v => `${v.code}: ${v.detail}`)];
     if (details.length) {
       const list = document.createElement('ul');
       for (const detail of details) {
@@ -62,20 +110,94 @@
     }
   }
 
-  // Register before starting a session so the first heartbeat cannot be missed.
-  const ready = listen('guard:report', (e) => render(e.payload));
+  // Resolve listener errors into a value to avoid unhandled rejections before clicking.
+  const ready = listen ? listen('guard:report', e => render(e.payload)).then(() => null, error => String(error)) : Promise.resolve('Open the native app to run system checks.');
+  button.disabled = !invoke;
   button.onclick = async () => {
     button.disabled = true;
     el.textContent = 'Contacting local server… Exam locked.';
     try {
-      await ready;
+      const error = await ready;
+      if (error) throw new Error(error);
       render(await invoke('start_session'));
       button.textContent = 'Monitoring active — close app to stop';
     } catch (error) {
       showError(error);
-      button.disabled = false;
+      button.disabled = !invoke;
     }
   };
+
+  const input = document.getElementById('typing-input');
+  const reset = document.getElementById('typing-reset');
+  const stop = document.getElementById('typing-stop');
+  const typingState = document.getElementById('typing-state');
+  const { passage, metrics, diagnosticSummary } = window.TypingTest;
+  document.getElementById('passage').textContent = passage;
+  let started = null;
+  let ended = null;
+
+  function refreshMetrics() {
+    const elapsed = started === null ? 0 : (ended ?? performance.now()) - started;
+    const result = metrics(input.value, passage, elapsed);
+    document.getElementById('wpm').textContent = result.wpm;
+    document.getElementById('accuracy').textContent = `${result.accuracy}%`;
+    document.getElementById('characters').textContent = result.characters;
+    document.getElementById('elapsed').textContent = `${result.seconds}s`;
+  }
+
+  reset.onclick = () => {
+    input.value = '';
+    input.disabled = false;
+    started = null;
+    ended = null;
+    stop.disabled = false;
+    typingState.textContent = 'Type the passage. Timer begins with your first input.';
+    refreshMetrics();
+    input.focus();
+  };
+  stop.onclick = () => {
+    ended = performance.now();
+    input.disabled = true;
+    stop.disabled = true;
+    typingState.textContent = input.value === passage ? 'Passage completed.' : 'Attempt finished. Reset to try again.';
+    refreshMetrics();
+  };
+  input.addEventListener('input', () => {
+    if (started === null && input.value.length) started = performance.now();
+    if (input.value === passage) stop.onclick();
+    else refreshMetrics();
+  });
+  setInterval(() => { if (started !== null && ended === null) refreshMetrics(); }, 250);
+
+  async function refreshDiagnostics() {
+    const state = document.getElementById('diagnostic-state');
+    if (!invoke) {
+      state.textContent = 'Browser preview only. Open the native app for Windows input diagnostics.';
+      return;
+    }
+    try {
+      const d = await invoke('input_diagnostics');
+      state.textContent = diagnosticSummary(d);
+      const set = (id, value) => { document.getElementById(id).textContent = value; };
+      set('keyboard-hook', d.supported ? (d.keyboard_active ? 'Active' : 'Inactive') : 'N/A');
+      set('mouse-hook', d.supported ? (d.mouse_active ? 'Active' : 'Inactive') : 'N/A');
+      set('injected-keys', d.supported ? d.injected_keys : 'N/A');
+      set('injected-clicks', d.supported ? d.injected_clicks : 'N/A');
+      set('samples', d.supported ? `${d.samples}/200` : 'N/A');
+      set('mean', d.mean_ms === null ? '—' : `${d.mean_ms.toFixed(1)} ms`);
+      set('sd', d.sd_ms === null ? '—' : `${d.sd_ms.toFixed(1)} ms`);
+    } catch (error) {
+      state.textContent = `Native diagnostics unavailable: ${error}`;
+      for (const id of ['keyboard-hook', 'mouse-hook', 'injected-keys', 'injected-clicks', 'samples', 'mean', 'sd']) {
+        document.getElementById(id).textContent = '—';
+      }
+    }
+  }
+  async function pollDiagnostics() {
+    await refreshDiagnostics();
+    setTimeout(pollDiagnostics, 1000);
+  }
+  pollDiagnostics();
 </script>
 </body>
 </html>

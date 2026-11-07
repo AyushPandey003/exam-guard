@@ -27,18 +27,42 @@ pub fn check(sys: &System) -> Vec<Violation> {
     out
 }
 
-pub use imp::{input_anomalies, start_input_monitor};
+#[derive(serde::Serialize, Default)]
+pub struct InputDiagnostics {
+    pub supported: bool,
+    pub keyboard_active: bool,
+    pub mouse_active: bool,
+    pub injected_keys: u32,
+    pub injected_clicks: u32,
+    pub samples: usize,
+    pub mean_ms: Option<f64>,
+    pub sd_ms: Option<f64>,
+}
+
+fn timing_stats(times: &[u32]) -> Option<(f64, f64)> {
+    if times.len() < 2 { return None; }
+    let intervals: Vec<f64> = times.windows(2)
+        .map(|w| w[1].wrapping_sub(w[0]) as f64).collect();
+    let mean = intervals.iter().sum::<f64>() / intervals.len() as f64;
+    let sd = (intervals.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+        / intervals.len() as f64).sqrt();
+    Some((mean, sd))
+}
+
+pub use imp::{diagnostics, input_anomalies, start_input_monitor};
 
 #[cfg(windows)]
 mod imp {
     use crate::report::Violation;
-    use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
     use std::sync::Mutex;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::*;
 
+    static KEYBOARD_ACTIVE: AtomicBool = AtomicBool::new(false);
+    static MOUSE_ACTIVE: AtomicBool = AtomicBool::new(false);
     static INJ_KEYS: AtomicU32 = AtomicU32::new(0);
     static INJ_CLICKS: AtomicU32 = AtomicU32::new(0);
     static KEY_TIMES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
@@ -75,30 +99,51 @@ mod imp {
             let hm = GetModuleHandleW(PCWSTR::null())
                 .map(|m| HINSTANCE(m.0))
                 .unwrap_or(HINSTANCE(std::ptr::null_mut()));
-            let _k = SetWindowsHookExW(WH_KEYBOARD_LL, Some(kb_proc), hm, 0);
-            let _m = SetWindowsHookExW(WH_MOUSE_LL, Some(ms_proc), hm, 0);
+            let keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, Some(kb_proc), hm, 0);
+            let mouse = SetWindowsHookExW(WH_MOUSE_LL, Some(ms_proc), hm, 0);
+            KEYBOARD_ACTIVE.store(keyboard.is_ok(), Relaxed);
+            MOUSE_ACTIVE.store(mouse.is_ok(), Relaxed);
             let mut msg = MSG::default();
-            while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
+            while GetMessageW(&mut msg, HWND::default(), 0, 0).0 > 0 {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+            KEYBOARD_ACTIVE.store(false, Relaxed);
+            MOUSE_ACTIVE.store(false, Relaxed);
+            if let Ok(hook) = keyboard { let _ = UnhookWindowsHookEx(hook); }
+            if let Ok(hook) = mouse { let _ = UnhookWindowsHookEx(hook); }
         });
+    }
+
+    pub fn diagnostics() -> super::InputDiagnostics {
+        let mut d = super::InputDiagnostics {
+            supported: true,
+            keyboard_active: KEYBOARD_ACTIVE.load(Relaxed),
+            mouse_active: MOUSE_ACTIVE.load(Relaxed),
+            injected_keys: INJ_KEYS.load(Relaxed),
+            injected_clicks: INJ_CLICKS.load(Relaxed),
+            ..Default::default()
+        };
+        if let Ok(times) = KEY_TIMES.lock() {
+            d.samples = times.len();
+            if let Some((mean, sd)) = super::timing_stats(&times) {
+                d.mean_ms = Some(mean);
+                d.sd_ms = Some(sd);
+            }
+        }
+        d
     }
 
     pub fn input_anomalies() -> Vec<Violation> {
         let mut out = Vec::new();
-        // Tolerate a couple of injected events: IMEs, on-screen keyboards and
-        // assistive tech inject legitimately.
-        let (k, c) = (INJ_KEYS.load(Relaxed), INJ_CLICKS.load(Relaxed));
+        let d = diagnostics();
+        // Counts are cumulative for this app process, not per typing attempt.
+        let (k, c) = (d.injected_keys, d.injected_clicks);
         if k >= 3 || c >= 3 {
             out.push(Violation::new("INJECTED_INPUT", format!("{k} injected keys, {c} injected clicks")));
         }
-        if let Ok(v) = KEY_TIMES.lock() {
-            if v.len() >= 40 {
-                let d: Vec<f64> = v.windows(2).map(|w| w[1].wrapping_sub(w[0]) as f64).collect();
-                let mean = d.iter().sum::<f64>() / d.len() as f64;
-                let sd = (d.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / d.len() as f64).sqrt();
-                // Humans are irregular; macros are metronomic.
+        if d.samples >= 40 {
+            if let (Some(mean), Some(sd)) = (d.mean_ms, d.sd_ms) {
                 if mean < 250.0 && sd < 4.0 {
                     out.push(Violation::new("INPUT_TIMING", format!("keystroke interval mean {mean:.0}ms sd {sd:.1}ms")));
                 }
@@ -112,6 +157,7 @@ mod imp {
 mod imp {
     use crate::report::Violation;
     pub fn start_input_monitor() {}
+    pub fn diagnostics() -> super::InputDiagnostics { super::InputDiagnostics::default() }
     pub fn input_anomalies() -> Vec<Violation> {
         Vec::new()
     }
